@@ -40,10 +40,10 @@
   }
   .circulo::after {
     content: ""; width: 12px; height: 12px; border-radius: 50%;
-    background: var(--acento); transform: scale(0); transition: transform .12s ease-out;
+    background: var(--acento); display: none;
   }
   [aria-checked="true"] .circulo { border-color: var(--acento); }
-  [aria-checked="true"] .circulo::after { transform: scale(1); }
+  [aria-checked="true"] .circulo::after { display: block; }
   .titulo { display: block; font-weight: 500; overflow-wrap: anywhere; }
   [aria-checked="true"] .titulo { color: var(--suave); text-decoration: line-through; }
   .detalle { display: block; margin-top: 4px; color: var(--suave); font-size: 15px; }
