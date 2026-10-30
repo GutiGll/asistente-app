@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Pendientes</title>
+<script>
+  // Las tareas viajan en el fragmento (#), que nunca llega al servidor.
+  window.DATOS = location.hash.slice(1).split(/[?&]/)[0];
+</script>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+  :root {
+    --fondo: var(--tg-theme-bg-color, #1a1a1a);
+    --texto: var(--tg-theme-text-color, #f2f2f2);
+    --suave: var(--tg-theme-hint-color, #8e8e8e);
+    --linea: color-mix(in srgb, var(--suave) 22%, transparent);
+    --acento: var(--tg-theme-button-color, #3a8df5);
+    --acento-texto: var(--tg-theme-button-text-color, #ffffff);
+    --alerta: #e5a33d;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; background: var(--fondo); color: var(--texto); }
+  body {
+    font: 17px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    padding: 20px 0 104px;
+  }
+  header { padding: 0 20px 16px; }
+  h1 { margin: 0; font-size: 24px; font-weight: 600; letter-spacing: -.01em; }
+  header p { margin: 4px 0 0; color: var(--suave); font-size: 15px; }
+  ul { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--linea); }
+  li { border-bottom: 1px solid var(--linea); }
+  button.tarea {
+    display: flex; gap: 16px; width: 100%; padding: 18px 20px;
+    border: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer;
+  }
+  .circulo {
+    flex: none; width: 24px; height: 24px; margin-top: 1px; border-radius: 50%;
+    border: 2px solid var(--suave); display: grid; place-items: center;
+  }
+  .circulo::after {
+    content: ""; width: 12px; height: 12px; border-radius: 50%;
+    background: var(--acento); transform: scale(0); transition: transform .12s ease-out;
+  }
+  [aria-checked="true"] .circulo { border-color: var(--acento); }
+  [aria-checked="true"] .circulo::after { transform: scale(1); }
+  .titulo { display: block; font-weight: 500; overflow-wrap: anywhere; }
+  [aria-checked="true"] .titulo { color: var(--suave); text-decoration: line-through; }
+  .detalle { display: block; margin-top: 4px; color: var(--suave); font-size: 15px; }
+  .atrasada { color: var(--alerta); }
+  .vacio { padding: 48px 20px; text-align: center; color: var(--suave); }
+  footer {
+    position: fixed; inset: auto 0 0; padding: 12px 20px calc(12px + env(safe-area-inset-bottom));
+    background: var(--fondo); border-top: 1px solid var(--linea);
+  }
+  footer button {
+    width: 100%; min-height: 48px; border: 0; border-radius: 12px;
+    background: var(--acento); color: var(--acento-texto); font: 600 17px/1 inherit; font-family: inherit;
+  }
+  footer button:disabled { opacity: .4; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Tus pendientes</h1>
+  <p id="resumen"></p>
+</header>
+<ul id="lista"></ul>
+<footer><button id="guardar" disabled>Selecciona las tareas hechas</button></footer>
+<script>
+  const telegram = window.Telegram && Telegram.WebApp;
+  if (telegram) { telegram.ready(); telegram.expand(); }
+
+  function leerTareas() {
+    try {
+      const base64 = DATOS.replace(/-/g, "+").replace(/_/g, "/");
+      const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
+      return JSON.parse(new TextDecoder().decode(bytes));
+    } catch (e) {
+      return null;
+    }
+  }
+
+  const tareas = leerTareas();
+  const lista = document.getElementById("lista");
+  const resumen = document.getElementById("resumen");
+  const guardar = document.getElementById("guardar");
+  const hechas = new Set();
+
+  function textoDias(dias) {
+    if (dias === null) return "";
+    return dias === 0 ? "hoy" : dias === 1 ? "1 día" : `${dias} días`;
+  }
+
+  function actualizar() {
+    guardar.disabled = hechas.size === 0;
+    guardar.textContent = hechas.size
+      ? `Marcar ${hechas.size} como ${hechas.size === 1 ? "hecha" : "hechas"}`
+      : "Selecciona las tareas hechas";
+  }
+
+  function crearTarea([id, titulo, quien, dias]) {
+    const boton = document.createElement("button");
+    boton.className = "tarea";
+    boton.setAttribute("role", "checkbox");
+    boton.setAttribute("aria-checked", "false");
+
+    const circulo = document.createElement("span");
+    circulo.className = "circulo";
+
+    const texto = document.createElement("span");
+    const nombre = document.createElement("span");
+    nombre.className = "titulo";
+    nombre.textContent = titulo;
+    const detalle = document.createElement("span");
+    detalle.className = "detalle";
+    detalle.textContent = quien;
+    if (dias !== null) {
+      const tiempo = document.createElement("span");
+      tiempo.textContent = (quien ? " · " : "") + textoDias(dias);
+      if (dias > 3) tiempo.className = "atrasada";
+      detalle.append(tiempo);
+    }
+    texto.append(nombre, detalle);
+    boton.append(circulo, texto);
+
+    boton.addEventListener("click", () => {
+      const marcada = hechas.has(id);
+      marcada ? hechas.delete(id) : hechas.add(id);
+      boton.setAttribute("aria-checked", String(!marcada));
+      if (telegram && telegram.HapticFeedback) telegram.HapticFeedback.selectionChanged();
+      actualizar();
+    });
+
+    const fila = document.createElement("li");
+    fila.append(boton);
+    return fila;
+  }
+
+  if (!tareas) {
+    resumen.textContent = "Abre esta página desde el bot de Telegram.";
+    guardar.hidden = true;
+  } else if (!tareas.length) {
+    lista.remove();
+    resumen.textContent = "Sin tareas pendientes";
+    guardar.hidden = true;
+  } else {
+    resumen.textContent = tareas.length === 1 ? "1 abierta" : `${tareas.length} abiertas`;
+    lista.append(...tareas.map(crearTarea));
+  }
+
+  guardar.addEventListener("click", () => {
+    if (telegram) telegram.sendData(JSON.stringify({ hechas: [...hechas] }));
+  });
+</script>
+</body>
+</html>
